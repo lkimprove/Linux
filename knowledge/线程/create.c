@@ -50,6 +50,8 @@ int main(){
 
         //终止主线程 ---> 进程不会终止
         if(i == 5){
+            //void pthread_exit(void *retval);
+            //retval：储存线程的返回值
             pthread_exit(NULL);
         }
     }
