@@ -86,6 +86,7 @@ class BlockQueue{
         }
 };
 
+
 //生产者线程入口函数
 void* Produce(void* arg){
     BlockQueue* q = (BlockQueue*) arg;
@@ -100,7 +101,6 @@ void* Produce(void* arg){
     return NULL;
 }
 
-
 //消费者线程入口函数
 void* Consume(void* arg){
     BlockQueue* q = (BlockQueue*) arg;
@@ -113,6 +113,7 @@ void* Consume(void* arg){
 
     return NULL;
 }
+
 
 int main(){
     int ret, i;
