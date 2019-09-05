@@ -40,7 +40,8 @@ class BlockQueue{
             pthread_mutex_lock(&_mutex);
 
             //检查队列容量
-            if(_queue.size() == _capacity){
+            //循环判断临界资源，防止被唤醒后，未判断是否可以操作临界资源，而直接操作临界资源
+            while(_queue.size() == _capacity){
                 //等待 + 解锁
                 pthread_cond_wait(&_producer, &_mutex);
             }
@@ -64,7 +65,8 @@ class BlockQueue{
             pthread_mutex_lock(&_mutex);
 
             //检查队列是否为空
-            if(_queue.empty()){
+            //循环判断临界资源，防止被唤醒后，未判断是否可以操作临界资源，而直接操作临界资源
+            while(_queue.empty()){
                 //等待 + 解锁
                 pthread_cond_wait(&_consumer, &_mutex);
             }
