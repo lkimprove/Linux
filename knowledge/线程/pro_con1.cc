@@ -138,7 +138,7 @@ int main(){
 
     //  线程等待
     pthread_join(ptid, NULL);
-    pthread_join(ctid, NULL);
+    pthread_join(ctid, NULL); 
 
     return 0;
 }
