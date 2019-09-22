@@ -107,7 +107,7 @@ class UdpSock{
         //关闭套接字
         bool Close(){
             //判断是否需要关闭套接字
-            if(_sockfd <= 0){
+            if(_sockfd >= 0){
                 close(_sockfd);
                 _sockfd = -1;
             }
