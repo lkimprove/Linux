@@ -116,14 +116,13 @@ void* Consume(void* arg){
 
 
 int main(){
-    int ret, i;
-    pthread_t ctid, ptid;
-
     //线程安全队列
     BlockQueue bq;
     
+    pthread_t ctid, ptid;
+    
     //创建生产者线程
-    ret = pthread_create(&ptid, NULL, Produce, (void*) &bq);
+    int ret = pthread_create(&ptid, NULL, Produce, (void*) &bq);
     if(ret != 0){
         cout << "生产者线程创建失败！" << endl;
         return -1;
