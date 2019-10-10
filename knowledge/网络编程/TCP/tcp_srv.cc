@@ -1,4 +1,4 @@
-//服务端（多线程版）
+//服务端（多进程版）
 #include "tcpsock.h"
 
 int main(int argc, char* argv[]){
