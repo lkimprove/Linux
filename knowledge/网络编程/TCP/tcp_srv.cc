@@ -1,12 +1,22 @@
 //服务端（多进程版）
 #include "tcpsock.h"
 
+void sigcb(){
+    //因为SIGCHID未非可靠信号，当个进程退出时，会事件丢失
+    //为了避免有的僵尸进程没有被处理
+    //所以在一次回调中，将所有能处理的僵尸进程，都处理掉
+    while(waitpid(-1, NULL, WNOHANG) > 0);    
+}
+
 int main(int argc, char* argv[]){
     //判断传入参数个数
     if(argc != 3){
         cout << "传入的参数个数有误" << endl;
         return -1;
     }
+    
+    //处理SIGNCHID信号
+    signal(SIGCHID, sigcb);
     
     //获取 ip 和 port
     string ip = argv[1];
