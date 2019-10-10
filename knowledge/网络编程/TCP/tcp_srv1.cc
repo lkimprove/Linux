@@ -3,6 +3,7 @@
 #include "tcpsock.h"
 #include <pthread.h>
 
+//线程入口函数
 void* thr_start(void* arg){
     //获取参数
     TcpSock* newsock = (TcpSock*)arg;
@@ -71,6 +72,8 @@ int main(int argc, char* argv[]){
         //创建于客户端通信的线程
         pthread_t tid;
         int ret_t = pthread_create(&tid, NULL, thr_start, (void*)newsock);
+        
+        //分离线程
         pthread_detach(tid);
     }
 
