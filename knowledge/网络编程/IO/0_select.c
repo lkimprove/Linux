@@ -1,4 +1,4 @@
-//创建select模型监控标准输入流
+//创建select模型监控标准输入流(0号描述符)
 
 #include <stdio.h>
 #include <unistd.h>
