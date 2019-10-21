@@ -109,8 +109,8 @@ int main(int argc, char* argv[]){
     CHECK_RET(listenSock.Listen());
 
     //当服务端主动关闭一些连接时（例如某些客户端不活跃，被服务端关闭），则会出现大量的TIME_WAIT连接，这些连接会占用一些五元组
-    //若新的连接IP和port与TIME_WAIT连接冲突时，就会出现问题
-    //这时通过setsockopt函数来设置该套接字，不用经历TIME_WAIT等待时间
+    //若新的连接IP和port与处于TIME_WAIT状态的连接出现冲突时，就会报错
+    //这时通过setsockopt函数来设置该监听套接字，不用经历TIME_WAIT等待时间
     int opt = 1;
     int listenFd = listenSock.GetFd();
     setsockopt(listenFd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
