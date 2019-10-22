@@ -107,6 +107,9 @@ int main(int argc, char* argv[]){
 
     //开始监听
     CHECK_RET(listenSock.Listen());
+    
+    //将监听套接字设置为非阻塞
+    listenSock.SetNonBlock();
 
     //当服务端主动关闭一些连接时（例如某些客户端不活跃，被服务端关闭），则会出现大量的TIME_WAIT连接，这些连接会占用一些五元组
     //若新的连接IP和port与处于TIME_WAIT状态的连接出现冲突时，就会报错
@@ -145,7 +148,7 @@ int main(int argc, char* argv[]){
                 }
                 
                 //将通信套接字设置为非阻塞
-                //newSock.SetNonBlock();
+                newSock.SetNonBlock();
 
                 //将已连接的文件描述符添加到监控集合
                 ret = e.Add(newSock);
@@ -169,11 +172,6 @@ int main(int argc, char* argv[]){
                 //发送数据
                 buf.clear();
                 cin >> buf;
-                
-                if(buf == "close"){
-                    listenSock.Close();
-                    return 0;
-                }
 
                 ret = list[i].Send(buf);
                 if(ret == false){
