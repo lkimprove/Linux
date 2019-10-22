@@ -31,6 +31,15 @@ class TcpSocket{
             _sockfd =  sockfd;
         }
 
+        //设置为非阻塞
+        void SetNonBlock(){
+            //F_SETFD是一种覆盖设置，因为参数设置是一个宏，其内容是一个二进制位的标志位
+            //若直接进行设置，套接字的其他属性会丢失，
+            //所以需要先获取套接字原来的属性，在 |
+            int flag = fcntl(_sockfd, F_GETFL, 0);
+            fcntl(_sockfd, F_SETFL, O_NONBLOCK | flag);
+        }
+
         //创建套接字
         bool Sock(){
             _sockfd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
@@ -119,19 +128,58 @@ class TcpSocket{
             return true;
         }
 
-        //接收数据
-        bool Recv(string& buf){
+        //客户端接收数据
+        bool Recv(string& buf, int flag){
             char temp[1024] = { 0 };
+            
             int ret = recv(_sockfd, temp, 1023, 0);
             if(ret < 0){
-                cerr << "recv  error" << endl;
+                cerr << "recv error" << endl;
                 return false;
             }
-            
+            else if(ret == 0){
+                cerr << "wait timoeout" << endl;
+                return false;
+            }
+
             buf.assign(temp, ret);
 
             return true;
+
         }
+
+        //服务端接收数据
+        bool Recv(string& buf){
+            char temp[6] = { 0 };
+            //不确定要接受数据的大小
+            //则循环接收数据
+            buf.clear();
+
+            while(1){
+                int ret = recv(_sockfd, temp, 6, 0);
+                if(ret < 0){
+                    //当套接字被设置为非阻塞时，recv不满足IO条件时，会返回-1
+                    //但若错误编号errno = EAGAIN / EWOULDBLOCK，表示缓冲区中没有可读的数据，而不是致命错误
+                    if(errno == EAGAIN){
+                        return true;    
+                    }
+
+                    cerr << "recv  error" << endl;
+                    return false;
+                }
+                else if(ret == 0){
+                    cerr << "perr shutdown" << endl;
+                    return false;
+                }
+                
+                //TCP的send和recv函数对于接收的字符是无边界的，不以'\0'为结束标志
+                temp[ret] = '\0';
+                buf += temp;
+            }
+             
+            return true;
+        }
+
 
         //关闭套接字
         bool Close(){
