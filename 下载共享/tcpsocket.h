@@ -1,11 +1,14 @@
 #include <iostream>
 #include <string>
+#include <fcntl.h>
 #include <stdio.h>
 #include <unistd.h>
-#include <netinet.h>
+#include <netinet/in.h>
 #include <arpa/inet.h>
 #include <sys/socket.h>
 using namespace std;
+
+#define MAX_REQUEST 8192
 
 class TcpSocket{
     private:
@@ -28,7 +31,7 @@ class TcpSocket{
         }
 
         //初始化
-        bool SockInit(const string& ip, uint16_t& port){
+        bool SocketInit(uint16_t& port){
             //创建套接字
             _sockfd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
             if(_sockfd < 0){
@@ -45,7 +48,7 @@ class TcpSocket{
             addr.sin_family = AF_INET;
             addr.sin_port = htons(port);
             //INADDR_ANY 0.0.0.0 
-            addr.sin_addr.s_addr = inet_addr(ip);
+            addr.sin_addr.s_addr = INADDR_ANY; 
             socklen_t len = sizeof(addr);
 
             //绑定地址信息
@@ -65,7 +68,7 @@ class TcpSocket{
                 return false;
             }
 
-            //在外部选择是否将套接字设置为非阻塞
+            //在外部将套接字设置为非阻塞
 
             return true;
         }
@@ -85,7 +88,7 @@ class TcpSocket{
             newSock._sockfd = fd;
 
             //将用于通信的套接字设置非阻塞
-            2sock.SetNonBlock();
+            newSock.SetNonBlock();
 
             return true;
         }
@@ -93,7 +96,7 @@ class TcpSocket{
         //探测接受，判断接受的数据中是否有/r/n/r/n
         bool RecvPeek(string& buf){
             buf.clear();
-            char temp[8192] = { 0 };
+            char temp[MAX_REQUEST] = { 0 };
             int ret = recv(_sockfd, temp, 8192, MSG_PEEK);
             
             if(ret < 0){
@@ -118,7 +121,7 @@ class TcpSocket{
 
         //通过探测接收获取的要接受的数据长度len，直接接收数据
         bool Recv(string& buf, int len){
-            //获取指定长度
+            buf.clear();
             buf.resize(len);
 
             int rlen = 0;   //已接收的数据长度
@@ -134,7 +137,7 @@ class TcpSocket{
                     return false;
                 }
                 else if(ret == 0){
-                    cerr << "peer error" << endl;
+                    cerr << "peer shutdown" << endl;
                     return false;
                 }
                 
