@@ -1,6 +1,5 @@
 #include "tcpsocket.h"
 #include <sys/epoll.h>
-using namespace std;
 
 #define MAX_EPOLL 1024
 
@@ -23,7 +22,7 @@ class Epoll{
         }
 
         //添加文件描述符
-        bool Add(TcpSocket& sock){
+        bool AddSock(TcpSocket& sock){
             //获取文件描述符
             int fd = sock.GetFd();
 
@@ -42,7 +41,7 @@ class Epoll{
         }
         
         //删除文件描述符
-        bool Del(TcpSocket& sock){
+        bool DelSock(TcpSocket& sock){
             //获取文件描述符
             int fd = sock.GetFd();
 
@@ -57,7 +56,7 @@ class Epoll{
 
 
         //获取就绪的文件描述符
-        bool Wait(vector<TcpSocket>& list, int timeout = 2000){
+        bool WaitSock(vector<TcpSocket>& list, int timeout = 2000){
             //创建epoll_event结构体数组
             epoll_event evs[MAX_EPOLL];
 
