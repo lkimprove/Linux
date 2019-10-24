@@ -1,4 +1,7 @@
+#ifndef __M_EPOLL_H__
+#define __M_EPOLL_H__
 #include "tcpsocket.h"
+#include <vector>
 #include <sys/epoll.h>
 
 #define MAX_EPOLL 1024
@@ -45,7 +48,7 @@ class Epoll{
             //获取文件描述符
             int fd = sock.GetFd();
 
-            int ret = epoll_ctl(_epfd, EPOLL_DEL, fd, NULL);
+            int ret = epoll_ctl(_epfd, EPOLL_CTL_DEL, fd, NULL);
             if(ret < 0){
                 cerr << "del fd error" << endl;
                 return false;
@@ -66,7 +69,7 @@ class Epoll{
                 return false;
             }
             else if(nfds == 0){
-                cerr << "wait timeout" << endl;
+                cerr << "epoll wait timeout" << endl;
                 return false;
             }
 
@@ -82,3 +85,4 @@ class Epoll{
             return true;
         }
 };
+#endif
