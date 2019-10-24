@@ -1,3 +1,5 @@
+#ifndef __M_SOCK_H__
+#define __M_SOCK_H__
 #include <iostream>
 #include <string>
 #include <fcntl.h>
@@ -78,7 +80,7 @@ class TcpSocket{
             sockaddr_in addr;
             socklen_t len = sizeof(addr);
 
-            int fd = accept(_sockfd, (sockaddr)*addr, &len);
+            int fd = accept(_sockfd, (sockaddr*)&addr, &len);
             if(fd < 0){
                 cerr << "accept error" << endl;
                 return false;
@@ -97,7 +99,7 @@ class TcpSocket{
         bool RecvPeek(string& buf){
             buf.clear();
             char temp[MAX_REQUEST] = { 0 };
-            int ret = recv(_sockfd, temp, 8192, MSG_PEEK);
+            int ret = recv(_sockfd, temp, MAX_REQUEST, MSG_PEEK);
             
             if(ret < 0){
                 //如果缓冲区没有数据
@@ -137,14 +139,36 @@ class TcpSocket{
                     return false;
                 }
                 else if(ret == 0){
+                    //连接断开
                     cerr << "peer shutdown" << endl;
                     return false;
                 }
                 
                 //更新rlen
-                rlen += len;
+                rlen += ret;
             }
 
             return true;
         }
+
+        //发送数据
+        bool Send(const string& buf){
+            int ret = send(_sockfd, &buf[0], buf.size(), 0);
+            if(ret < 0){
+                cerr << "send error" << endl;
+                return false;
+            }
+
+            return true;
+        }
+
+
+        //关闭套接字
+        void Close(){
+            if(_sockfd >= 0){
+                close(_sockfd);
+                _sockfd = -1;
+            }
+        }
 };
+#endif
