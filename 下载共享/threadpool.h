@@ -1,10 +1,12 @@
+#ifndef __M_POOL_H__
+#define __M_POOL_H__
 #include <iostream>
 #include <queue>
 #include <thread>
 #include <pthread.h>
 using namespace std;
 
-typedef void(Handler_t*)(int);
+typedef void(*Handler_t)(int);
 
 class ThreadTask{
     private:
@@ -33,8 +35,8 @@ class ThreadPool{
         queue<ThreadTask> _queue;
         
         pthread_mutex_t _mutex;     //互斥锁
-        pthread_cond_t _porducer;   //生产者
-        pthtread_cond_t _consumer;  //消费者
+        pthread_cond_t _producer;   //生产者
+        pthread_cond_t _consumer;  //消费者
    
         //线程入口函数
         void ThreadStart(){
@@ -45,7 +47,7 @@ class ThreadPool{
                 //若队列中没有任务
                 while(_queue.empty()){
                     //等待 + 解锁
-                    pthread_cond_wait(&_consumer, _mutex);
+                    pthread_cond_wait(&_consumer, &_mutex);
                 }
 
                 //出队 
@@ -56,7 +58,7 @@ class ThreadPool{
                 pthread_mutex_unlock(&_mutex);
 
                 //唤醒生产者
-                pthread_signal(&_producer);
+                pthread_cond_signal(&_producer);
 
                 //开始处理任务
                 task.TaskRun();
@@ -66,7 +68,7 @@ class ThreadPool{
     public:
         //构造函数
         ThreadPool(int maxThread = 10, int maxQueue = 10):
-            _maxThread(maxThread), _maxQueue(maxQueue), _queue(maxQueue){
+            _maxThread(maxThread), _maxQueue(maxQueue){
                
                 pthread_mutex_init(&_mutex, NULL);
                 pthread_cond_init(&_producer, NULL);
@@ -76,8 +78,8 @@ class ThreadPool{
         //析构函数
         ~ThreadPool(){
             pthread_mutex_destroy(&_mutex);
-            pthread_mutex_destroy(&_producer);
-            pthread_mutex_destroy(&_consumer);
+            pthread_cond_destroy(&_producer);
+            pthread_cond_destroy(&_consumer);
         }
 
         
@@ -88,7 +90,7 @@ class ThreadPool{
                 thread thr = thread(&ThreadPool::ThreadStart, this);
                 
                 //线程分离
-                thr.join();
+                thr.detach();
             }           
             
             return true;
@@ -102,7 +104,7 @@ class ThreadPool{
             //若任务队列已满
             while(_queue.size() == _maxQueue){
                 //等待 + 解锁
-                pthread_mutex_unlock(&_producer, &_mutex);
+                pthread_cond_wait(&_producer, &_mutex);
             }
 
             //入队
@@ -117,3 +119,4 @@ class ThreadPool{
             return true;
         }
 };
+#endif
