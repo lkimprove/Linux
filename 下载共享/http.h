@@ -1,75 +1,163 @@
+#ifndef __M_HTTP_H__
+#define __M_HTTP_H__
+
 #include "tcpsocket.h"
 #include <list>
+#include <sstream>
 #include <unordered_map>
-#include <boost/algorithm/string.h>
+#include <boost/algorithm/string.hpp>
 using namespace boost;
 
 //HTTP请求类
 class HttpRequest{
     private:
-        //首行信息
-        string _version;    //协议版本
-        string _method;     //请求方法
-        int _status;    //状态码
-        string _path;   //URL中的请求路径
-        //URL中的查询字符串，在URL中以 key=val&key=val 的形式存在
-        unordered_map<string, string> _queryString;    
-
-        //头部，以 key: val 的形式存在
-        unordered_map<string, string> _header;
-        string _body;   //正文
-
-        //接收HTTP请求(首行+头部)
+        //接收HTTP请求（首行 + 头部）
         bool RecvRequest(TcpSocket& cliSock, string& request){
             while(1){
-                //探测性接收大量数据，判断是否包含头部+首行（/r/n/r/n）
+                //试探接受数据，判断接收的数据中是否有\r\n\r\n
                 string tmp;
-                if(cliSock.RecvPeek(tmp) == false){
+                bool ret = cliSock.RecvPeek(tmp);
+                if(ret == false){
                     return false;
                 }
-
                 size_t pos;
-                pos = tmp.find_first_of("\r\n\r\n");
-                //若接收一定长度后，仍未找到结束标志（\r\n\r\n） 则认为此次接收HTTP请求失败
+                //首行+头部的结束标志位 --- \r\n\r\n
+                pos = tmp.find("\r\n\r\n");
+                
+                //没有找到结束标志
                 if(pos == string::npos && tmp.size() == MAX_REQUEST){
                     return false;
                 }
-                //找到结束标志
-                else if(pos != string::npos){
-                    //直接接收首行 + 头部
+                //找到结束标志，直接进行接收
+                else if(pos != string::npos){                
                     size_t len = pos + 4;
-                    cilSock.Recv(request, len);
+                    ret = cliSock.Recv(tmp, len);
+                    if(ret == false){
+                        return false;
+                    }
+                    
+                    //获取request
+                    request.assign(&tmp[0], pos);
 
+                    //cout << request << endl;
                     return true;
                 }
             }
         }
-
-        //解析首行
-        bool ParseFirstLine(){
         
+        //解析首行
+        bool ParseFirstLine(string& firstLine){
+            //首行中有请求方法，URL和版本协议，由空格间隔
+            vector<string> lineList;
+            split(lineList, firstLine, is_any_of(" "), token_compress_on);
+            if(lineList.size() != 3){
+                cerr << "parse first line error";
+                return false;
+            }
+            
+            _method = lineList[0];  //请求方法
+            
+            //解析URL，分割出请求路径和查询字符串
+            size_t pos = lineList[1].find("?");
+            if(pos == string::npos) {
+                _path = lineList[1]; 
+            }
+            else if(pos != string::npos){
+                _path = lineList[1].substr(0, pos);  //请求路径
+                
+                //解析查询字符串，key=val&ket=val
+                string param = lineList[1].substr(pos + 1);
+                vector<string> paramList;
+                split(paramList, param, is_any_of("&"), token_compress_on);
+                for(auto s : paramList){
+                    pos = s.find("=");
+                    if(pos == string::npos){
+                        cerr << "queryString is error" << endl;
+                        return false;
+                    }
+                    else if(pos != string::npos){
+                        string key = s.substr(0, pos);
+                        string val = s.substr(pos + 1);
+                        _queryString[key] = val;
+                    }
+                }
+            }
+            
+    
+            _version = lineList[2]; //协议版本
+            
+            cout << "method: [" << _method << "]" << endl;
+            cout << "path: [" << _path << "]" << endl;
+            cout << "queryString: " << endl;
+            for(auto i : _queryString){
+                cout << "  " << i.first << "=" << i.second << endl;
+            }
+            cout << "version: [" << _version << "]"<< endl;
+
+            return true;
         }    
 
     public:
+        //HTTP请求：首行 + 头部
+        //首行：请求方法，URL，协议版本
+        //头部：key: val\r\n
+        //正文
+
+        //首行信息
+        string _method;     //请求方法
+        string _path;   //URL中的请求路径
+        //URL中的查询字符串，在URL中以 key=val&key=val 的形式存在
+        unordered_map<string, string> _queryString;    
+        string _version;    //协议版本
+
+        //头部，以 key: val 的形式存在
+        unordered_map<string, string> _header;
+        string _body;   //正文
+        
         //解析HTTP请求
         int ParseHttp(TcpSocket& cliSock){
             //接收HTTP请求（首行+头部）
             string request;
-
-            //接收HTTP请求
-            if(RecvRequest(cliSock, request) == false){
+            bool ret = RecvRequest(cliSock, request);
+            if(ret == false){
                 return 400;
             }
 
-            //对请求的字符串按照\r\n的格式进行分割，得到一个list
-             
+            //对请求的字符串按照\r\n的格式进行分割，得到一个requestList
+            vector<string> requestList;
+            split(requestList, request, is_any_of("\r\n"), token_compress_on);
+           
+            //for(int i = 0; i < requestList.size(); i++){
+            //    cout << requestList[i] << endl;
+            //}
 
-            //list[0]是首行，对首行解析
+            //requestList[0]是首行，对首行解析
+            ret = ParseFirstLine(requestList[0]);
+            if(ret == false){
+                return 400;
+            }
 
-            //lit[1]以后都是头部，对头部解析
+            //requestList[1]以后都是头部，对头部解析
+            //key: val
+            for(int i = 1; i < requestList.size(); i++){
+                size_t pos = requestList[i].find(": ");
+                if(pos == string:: npos){
+                    cerr << "header is error" << endl;
+                    return 400;
+                }
+                else if(pos != string::npos){
+                   string key = requestList[i].substr(0, pos);
+                   string val = requestList[i].substr(pos + 2);
+                   _header[key] = val;
+                }
+            }
 
             //请求信息校验
-
+            cout << "header: " <<endl;
+            for(auto i : _header){
+                cout << "  " <<i.first << ": " <<i.second << endl;
+            }
+            cout << endl;
 
             return 200;
         }
@@ -78,16 +166,65 @@ class HttpRequest{
 
 //HTTP响应类
 class HttpResponse{
+    //HTTP响应：首行 + 头部
+    //首行：协议版本，状态码，状态码描述
+    //头部
+    //正文
+    
     private:
+        //根据状态码获取状态描述
+        string GetDescribe(){
+            switch(_status){
+                case 400: return "Bad Request";
+                case 200: return "OK";
+            }
+            return "UnKnow";
+        }
 
     public:
+        //首行信息
+        string _version;    //协议版本
+        int _status;    //状态码
+
+        //头部，以 key: val 的形式存在
+        unordered_map<string, string> _header;
+        string _body;       //正文
+
+        //设置头部
+        bool SetHeader(const string& key, const string& val){
+            _header[key] = val;
+            return true;
+        }
+
         //发送错误
-        void SendError(TcpSocket& cliSock, int status){
-          
+        bool SendError(TcpSocket& cliSock){
+          return true;
         }
 
         //发送HTTP响应
-        void SendResponse(TcpSocket& cliSock){
-        
+        bool SendResponse(TcpSocket& cliSock){
+            stringstream tmp;
+            
+            //发送首行
+            tmp << _version << " " << _status << " " << GetDescribe() << "\r\n"; 
+           
+            //如果用户没有添加Content-Length，需要响应类自动添加
+            if(_header.find("Content-Length") == _header.end()){
+                string len = to_string(_body.size());
+                _header["Content-Length"] = len;
+            }
+
+            //发送头部
+            for(auto i : _header){
+                tmp << i.first << " " << i.second << ": " << "\r\n";
+            }    
+            tmp << "\r\n";
+            cliSock.Send(tmp.str());
+            
+            //发送正文
+            cliSock.Send(_body);
+
+            return true;
         }
 };
+#endif
