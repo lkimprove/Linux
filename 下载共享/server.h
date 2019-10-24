@@ -1,3 +1,5 @@
+#ifndef __M_SRV_H__
+#define __M_SRV_H__
 #include "tcpsocket.h"
 #include "epoll_wait.h"
 #include "threadpool.h"
@@ -9,16 +11,16 @@ class Server{
         ThreadPool _pool;   //线程池
         Epoll _epoll;   //epoll监控
     public:
-        bool Start(int port){
+        bool Start(uint16_t port){
             bool ret = true;
 
             //初始化服务端
             //创建套接字 + 绑定地址信息 + 监听
             ret = _listenSock.SocketInit(port);
-            if(rer == false){
+            if(ret == false){
                 return false;
             }
-            
+
             //将监听套接字设置为非阻塞
             _listenSock.SetNonBlock();
 
@@ -27,7 +29,7 @@ class Server{
             if(ret == false){
                 return false;
             }
-
+            
             //初始化epoll监控
             ret = _epoll.EpollInit();
             if(ret == false){
@@ -47,14 +49,13 @@ class Server{
                 
                 //判断是否有就绪的套接字
                 if(_epoll.WaitSock(list) == false){
-                    sleep(2);
                     continue;
                 }
 
                 //如果就绪的是通信套接字
                 for(int i = 0; i < list.size(); i++){
                     //若就绪的是监听套接字
-                    if(list[i].GetFd() == listenSock.GetFd()){
+                    if(list[i].GetFd() == _listenSock.GetFd()){
                         //获取已连接的客户端
                         TcpSocket cliSock;
                         ret = list[i].Accept(cliSock);
@@ -83,13 +84,13 @@ class Server{
                         _pool.AddTask(task);
 
                         //将该套接字从监控中移除，避免该套接字因为一直处于就绪状态而一直被处理
-                        _epool.DelSock(list[i]);
+                        _epoll.DelSock(list[i]);
                     }
                 }
             }
         
             //关闭监听套接字
-            listenSock.Close();
+            _listenSock.Close();
 
             return true;
         }
@@ -100,7 +101,7 @@ class Server{
             TcpSocket cliSock;
             cliSock.SetFd(sockfd);
 
-            HttpResquest req;   //HTTP解析类
+            HttpRequest req;   //HTTP解析类
             HttpResponse rep;   //HTTP响应类
 
             //解析HTTP
@@ -117,6 +118,8 @@ class Server{
                 return;
             }
             
+            //解析成功HTTP请求成功
+            cout << "------------------" << endl;
             //根据解析的HTTP请求，组织HTTP响应，并将其填充到HTTP响应类rep中
             HttpProcess(req, rep);
              
@@ -130,11 +133,18 @@ class Server{
         }
        
         
-        //HTTP解析
-        static void HttpProcess(HttpRequest& req, HttpResponse& rep){
-               
-              
+        //组织HTTP响应
+        static bool HttpProcess(HttpRequest& req, HttpResponse& rep){
+            //rep._status = 200;  //状态码
+            //rep._version = req._version;    //协议版本
+            //rep._body = "<html> Hello World </html>";       //正文
+            //rep.SetHeader("Content-Typed", "text/html");    //告诉浏览器需要将正文通过html渲染出来
 
+
+
+
+            return true; 
         }
 
 };
+#endif
