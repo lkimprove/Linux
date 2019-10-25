@@ -4,6 +4,9 @@
 #include "epoll_wait.h"
 #include "threadpool.h"
 #include "http.h"
+#include <boost/filesystem.hpp>
+#include <sstream>
+#define _MYROOT "./myroot"
 
 class Server{
     private:
@@ -120,6 +123,7 @@ class Server{
             
             //解析成功HTTP请求成功
             cout << "------------------" << endl;
+
             //根据解析的HTTP请求，组织HTTP响应，并将其填充到HTTP响应类rep中
             HttpProcess(req, rep);
              
@@ -133,17 +137,55 @@ class Server{
         }
        
         
-        //组织HTTP响应
-        static bool HttpProcess(HttpRequest& req, HttpResponse& rep){
+        //根据客户端请求的功能，组织HTTP响应
+        static void HttpProcess(HttpRequest& req, HttpResponse& rep){
+            rep._version = req._version;    //协议版本
+            
             //rep._status = 200;  //状态码
             //rep._version = req._version;    //协议版本
             //rep._body = "<html> Hello World </html>";       //正文
-            //rep.SetHeader("Content-Typed", "text/html");    //告诉浏览器需要将正文通过html渲染出来
+            //rep.SetHeader("Content-Type", "text/html");    //告诉浏览器需要将正文通过html渲染出来
+            
+            //上传文件(POST) --- 多进程CGI处理
+            //查看文件(GET) --- 请求一个目录
+            //下载文件(GET) --- 请求一个文件
+           
+            //获取相对路径，定义实际路径
+            //查看路径是否存在 filesystem::exists(string)
+            string realPath = _MYROOT + req._path; 
+            if(!filesystem::exists(realPath)){
+                rep._status = 404;
+                return;
+            }
+            
+            //若请求方法位POST，则为上传文件请求，进行多进程CGI处理
+            //若请求方法时GET，但查询字符出不为空，说明客户端提交了数据需要服务端进行处理，也直接进行多进程CGI处理
+            if((req._method == "POST") || (req._method == "GET" && req._queryString.size() != 0)){
+                //多进程CGI处理
+            }
+            else if(req._method == "GET" && req._queryString.size() == 0){
+                //若请求方法为GET，且查询字符串为空，此时需要判断客户端请求的路径 filesystem::is_directory
+                //若请求的路径是目录 --- 查看目录
+                if(filesystem::is_directory(realPath)){
+                    ListShow(realPath, rep._body);
+                    rep.SetHeader("Content-Type", "text/html");
+                }
+                //若请求的路径是文件 --- 文件下载
+                else{
+                    
+                }
+            }
+            
 
+            
+            rep._status = 200;  //状态码
+        }
 
-
-
-            return true; 
+        //目录展示
+        static void ListShow(string& path, string& body){
+            stringstream tmp;
+            tmp << "<heml>Hello</html>";
+            body = tmp.str();
         }
 
 };
