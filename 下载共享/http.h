@@ -177,6 +177,7 @@ class HttpResponse{
             switch(_status){
                 case 400: return "Bad Request";
                 case 200: return "OK";
+                case 404: return "Not Found";
             }
             return "UnKnow";
         }
@@ -198,14 +199,41 @@ class HttpResponse{
 
         //发送错误
         bool SendError(TcpSocket& cliSock){
-          return true;
+            stringstream tmp;
+            //首行
+            tmp << _version << " " << _status << " " << GetDescribe() << "\r\n"; 
+            
+            //正文
+            stringstream body;
+            body << "<html><h1>" << GetDescribe() << "</h1></html>";
+            _body = body.str();
+
+            //头部
+            SetHeader("Content-Length", to_string(_body.size()));
+            SetHeader("Content-Type", "text/html"); 
+            for(auto i : _header){
+                tmp << i.first << ": " << i.second << "\r\n";
+            } 
+            tmp << "\r\n";
+           
+            //发送
+            cliSock.Send(tmp.str());
+            cliSock.Send(_body);
+
+            return true;
         }
 
         //发送HTTP响应
         bool SendResponse(TcpSocket& cliSock){
-            stringstream tmp;
+            //先判断状态码，若状态码有问题，则SendError
+            if(_status != 200){
+                SendError(cliSock);
+                return true;
+            }
             
-            //发送首行
+            //状态码正确，发送正常的响应信息
+            stringstream tmp;
+            //首行
             tmp << _version << " " << _status << " " << GetDescribe() << "\r\n"; 
            
             //如果用户没有添加Content-Length，需要响应类自动添加
@@ -214,11 +242,13 @@ class HttpResponse{
                 _header["Content-Length"] = len;
             }
 
-            //发送头部
+            //头部
             for(auto i : _header){
-                tmp << i.first << " " << i.second << ": " << "\r\n";
+                tmp << i.first << ": " << i.second << "\r\n";
             }    
             tmp << "\r\n";
+            
+            //发送首行+头部
             cliSock.Send(tmp.str());
             
             //发送正文
