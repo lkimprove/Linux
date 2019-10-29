@@ -5,6 +5,7 @@
 #include "threadpool.h"
 #include "http.h"
 #include <boost/filesystem.hpp>
+#include <stdlib.h>
 #include <sstream>
 #define _MYROOT "./myroot"
 
@@ -162,6 +163,19 @@ class Server{
             //若请求方法时GET，但查询字符出不为空，说明客户端提交了数据需要服务端进行处理，也直接进行多进程CGI处理
             if((req._method == "POST") || (req._method == "GET" && req._queryString.size() != 0)){
                 //多进程CGI处理
+                
+                //for(auto it : req._header){
+                //    cout << it.first << ": "<< it.second << endl;
+                //}
+                //cout << "_body: "<<req._body << endl;
+
+                //在Content-Type 中有一个 boundary，是正文_body中的重要文件分隔符
+                //在正文中：
+                //  first_boundary = --boundary
+                //  middle_boundary = \r\n--boundary\r\n
+                //  last_boundary = \r\n--boundary--\r\n
+                cout << "=========CGI==============="  << endl;
+                CGIProcess(req, rep);
             }
             else if(req._method == "GET" && req._queryString.size() == 0){
                 //若请求方法为GET，且查询字符串为空，此时需要判断客户端请求的路径 filesystem::is_directory
@@ -181,12 +195,119 @@ class Server{
             rep._status = 200;  //状态码
         }
 
+        //外部CGI处理
+        static void CGIProcess(HttpRequest& req, HttpResponse& rep){
+            cout << "============CGI==============" << endl;
+            
+            //读写管道
+            int pipeIn[2], pipeOut[2];
+            if(pipe(pipeIn) < 0 || pipe(pipeOut) < 0){
+                cerr << "create pipe error" << endl;
+                return;
+            }
+
+            int pid = fork();
+            if(pid < 0){
+                return;
+            }
+            else if(pid == 0){
+                //0读，1写
+
+                close(pipeIn[0]);   //子进程写，关闭读
+                close(pipeOut[1]);   //子进程读，关闭写
+                dup2(pipeIn[1], 1);     //子进程写端重定向到标准输出1
+                dup2(pipeOut[0], 0);    //子进程读端重定向到标准输入0
+
+                //设置环境变量
+                setenv("METHOD", req._method.c_str(), 1);   //覆盖写入
+                setenv("PATH", req._path.c_str(), 1);   //覆盖写入
+                for(auto i : req._header){
+                    setenv(i.first.c_str(), i.second.c_str(), 1);   //覆盖写入
+                }
+
+                string realpath = _MYROOT + req._path;
+                //程序替换后，要保证HTTP请求可以在外部获得
+                //使用环境变量传递头部信息
+                //使用管道传递正文信息，子进程再使用管道传递响应结果
+                execl(realpath.c_str(), realpath.c_str(), NULL);
+                exit(0);                
+            }
+
+            close(pipeIn[1]);   //父进程读，关闭写
+            close(pipeOut[0]);  //父进程写，关闭读
+            
+            //将正文写入
+            write(pipeOut[1], &req._body[0], req._body.size());
+            while(1){
+                char buf[1024] = { 0 };
+                int ret = read(pipeIn[0], buf, 1024);
+                if(ret == 0){
+                    break;
+                }
+
+                buf[ret] = '\0';
+                rep._body += buf;
+            }
+           
+            close(pipeIn[0]);       //关闭读
+            close(pipeOut[1]);      //关闭写
+        }
+
+
         //目录展示
         static void ListShow(string& path, string& body){
+            //请求一个.. ---> 获取上层目录
+            
+            //./myroot
+            //第一次传入 ./myroot/，此时需要获取/
+            //第二次传入 ./myroot/textdir/，此时需要获取/textdir/
+            string root = _MYROOT;
+            //请求路径中是否在_ROOT中
+            size_t pos = path.find(root);
+            if(pos == string::npos){
+                return; 
+            }
+            string dirPath = path.substr(root.size());
+
             stringstream tmp;
-            tmp << "<heml>Hello</html>";
+            tmp << "<html> <head> <style> *{ margin : 0 }  .main-window{ height : 100%;width : 80%; margin : 0 auto;}";
+            tmp << ".upload{ position : relative; height : 20%; width : 100%; background-color : #ddd; text-align : center}";
+            tmp << ".listshow{ position : relative; height : 80%; width : 100%; background-color : #ddd;} </style> </head>";
+            tmp << " <body> <div class = 'main-window'> <div class = 'upload'>";
+            tmp << "<form action = '/upload' method = 'POST' enctype = 'multipart/form-data'>";
+            tmp << "<div class ='upload-btn'> <input type= 'file' name ='fileupload'>";
+            tmp << "<input type='submit' name = 'submit'></div></form>";
+            tmp << "</div> <hr />";
+            tmp << "<div class = 'listshow'><ol>";
+
+            //获取每一个文件信息
+            filesystem::directory_iterator begin(path);
+            filesystem::directory_iterator end;
+            for(; begin != end; begin++){
+                string pathName = begin->path().string();       //带路径的文件名
+                string fileName = begin->path().filename().string();    //文件名
+                string reqPath = dirPath + fileName;
+                
+                //如果该请求是一个目录
+                if(filesystem::is_directory(pathName)){
+                    tmp << "<li><strong> <a href = '" << reqPath << "'>" << fileName << "/"<< "</a></strong><br/>"; 
+                    tmp << "<small> filetype : directory </small></li>";
+                }
+                //如果请求的是一个普通文件
+                else{
+                    int64_t mtime = filesystem::last_write_time(pathName);
+                    int64_t ssize = filesystem::file_size(pathName);
+
+                    tmp << "<li><strong><a href='"<< reqPath << "'>" << fileName << "</a></strong><br/>";
+                    tmp << "<small> modified: " << mtime  <<  "<br/>";
+                    tmp << "application-ostream- " << ssize / 1024 << "bytes" << "<br/> </small></li>";
+                }
+            }
+            
+            tmp <<"</ol> </div> <hr /> </div> </body> </html>";
             body = tmp.str();
         }
 
 };
+
 #endif
