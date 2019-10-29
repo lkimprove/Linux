@@ -6,6 +6,7 @@
 #include <sstream>
 #include <unordered_map>
 #include <boost/algorithm/string.hpp>
+#include <sstream>
 using namespace boost;
 
 //HTTP请求类
@@ -158,6 +159,17 @@ class HttpRequest{
                 cout << "  " <<i.first << ": " <<i.second << endl;
             }
             cout << endl;
+
+            //接受正文
+            auto it = _header.find("Content-Length");
+            if(it != _header.end()){
+                stringstream tmp;
+                tmp << it->second;
+                int bodyLen;
+                tmp >> bodyLen;
+                
+                cliSock.Recv(_body, bodyLen);
+            }
 
             return 200;
         }
