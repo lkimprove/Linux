@@ -1,5 +1,6 @@
 #ifndef __M_SRV_H__
 #define __M_SRV_H__
+#include <fstream>
 #include "tcpsocket.h"
 #include "epoll_wait.h"
 #include "threadpool.h"
@@ -7,6 +8,7 @@
 #include <boost/filesystem.hpp>
 #include <stdlib.h>
 #include <sstream>
+
 #define _MYROOT "./myroot"
 
 class Server{
@@ -174,7 +176,6 @@ class Server{
                 //  first_boundary = --boundary
                 //  middle_boundary = \r\n--boundary\r\n
                 //  last_boundary = \r\n--boundary--\r\n
-                cout << "=========CGI==============="  << endl;
                 CGIProcess(req, rep);
             }
             else if(req._method == "GET" && req._queryString.size() == 0){
@@ -186,19 +187,47 @@ class Server{
                 }
                 //若请求的路径是文件 --- 文件下载
                 else{
-                    
+                    //通过Range判断是否需要断点续传
+                    auto i = rep._header.find("Range");
+                    //非断点续传
+                    if(i == rep._header.end()){
+                        Download(realPath, rep._body);        
+                        rep.SetHeader("Content-Type", "application/octet-stream");
+                        rep.SetHeader("Accept-Ranges", "bytes");
+                        rep.SetHeader("ETag", "abcdefg");
+                    }
+                    //断点续传
+                    else{
+                        string range = i->second;
+                        RangeDownload(realPath, range, rep._body);
+                        rep.SetHeader("Content-Type", "application/octet-stream");
+                        
+                        string uint = "bytes=";
+                        size_t pos = range.find(uint);
+                        if(pos == string::npos){
+                            return;
+                        }
+                        int64_t len = filesystem::file_size(realPath);
+                        stringstream tmp;
+                        tmp << "bytes ";
+                        tmp << range.substr(pos + uint.size());
+                        tmp << "/" ;
+                        tmp << len;
+                            
+                        rep.SetHeader("Content-Range", tmp.str());
+
+                        rep._status = 206;
+                        return;
+                    }
+
                 }
             }
-            
 
-            
             rep._status = 200;  //状态码
         }
 
         //外部CGI处理
         static void CGIProcess(HttpRequest& req, HttpResponse& rep){
-            cout << "============CGI==============" << endl;
-            
             //读写管道
             int pipeIn[2], pipeOut[2];
             if(pipe(pipeIn) < 0 || pipe(pipeOut) < 0){
@@ -206,6 +235,7 @@ class Server{
                 return;
             }
 
+            //创建子进程
             int pid = fork();
             if(pid < 0){
                 return;
@@ -218,7 +248,7 @@ class Server{
                 dup2(pipeIn[1], 1);     //子进程写端重定向到标准输出1
                 dup2(pipeOut[0], 0);    //子进程读端重定向到标准输入0
 
-                //设置环境变量
+                //设置环境变量，将头部通过环境变量传入子进程
                 setenv("METHOD", req._method.c_str(), 1);   //覆盖写入
                 setenv("PATH", req._path.c_str(), 1);   //覆盖写入
                 for(auto i : req._header){
@@ -236,7 +266,7 @@ class Server{
             close(pipeIn[1]);   //父进程读，关闭写
             close(pipeOut[0]);  //父进程写，关闭读
             
-            //将正文写入
+            //将正文通过管道写入
             write(pipeOut[1], &req._body[0], req._body.size());
             while(1){
                 char buf[1024] = { 0 };
@@ -308,6 +338,75 @@ class Server{
             body = tmp.str();
         }
 
-};
+        static bool RangeDownload(string& path, string& range, string& body){
+            //Range: bytes=start-end
+            string uint = "bytes=";    
+            size_t pos = range.find(uint);
+            if(pos == string::npos){
+                cerr << "can not find" << uint << endl;
+                return false;
+            }
+            
+            pos += uint.size();
 
+            size_t nextPos = range.find("-", pos);
+            if(nextPos == string::npos){
+                cerr << "can not find range -" << endl;
+                return false;
+            }
+            
+            string start = range.substr(pos, nextPos - pos);
+            string end = range.substr(nextPos + 1);
+            stringstream tmp;
+            int64_t dig_start, dig_end;
+            tmp << start;
+            tmp >> dig_start;
+            tmp.clear();
+            if(end.size() == 0){
+                dig_end = filesystem::file_size(path) - 1;    
+            }
+            else{
+                tmp << end;
+                tmp >> dig_end;
+            }
+          
+            int64_t len = dig_end - dig_start + 1;
+            body.resize(len);
+            
+            ifstream file(path);
+            if(!file.is_open()){
+                return false;
+            }
+            file.seekg(dig_start, ios::beg);
+            file.read(&body[0], len);
+            if(!file.good()){
+                cerr << "read error" << endl;
+                return false;
+            }
+
+            file.close();
+
+            return true;
+        }
+
+        //下载
+        static bool Download(string& path,string& body){
+            int64_t fsize = filesystem::file_size(path);    //获取文件大小
+            body.resize(fsize);
+            ifstream file(path);
+            if(!file.is_open()){
+                cerr << "open file error" << endl;
+                return false;
+            }
+            file.read(&body[0], fsize);
+            if(!file.good()){
+                cerr << "read file data error" << endl;
+                return false;
+            }
+
+            file.close();
+            return true;
+        }
+
+};
 #endif
