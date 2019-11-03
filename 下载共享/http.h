@@ -189,6 +189,7 @@ class HttpResponse{
             switch(_status){
                 case 400: return "Bad Request";
                 case 200: return "OK";
+                case 206: return "Partial Content";
                 case 404: return "Not Found";
             }
             return "UnKnow";
