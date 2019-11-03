@@ -92,6 +92,7 @@ class TcpSocket{
             //将用于通信的套接字设置非阻塞
             newSock.SetNonBlock();
 
+
             return true;
         }
 
@@ -153,12 +154,19 @@ class TcpSocket{
 
         //发送数据
         bool Send(const string& buf){
-            int ret = send(_sockfd, &buf[0], buf.size(), 0);
-            if(ret < 0){
-                cerr << "send error" << endl;
-                return false;
+            int len = 0;
+            while(len < buf.size()){
+                int ret = send(_sockfd, &buf[len], buf.size() - len, 0);
+                if(ret < 0){
+                    if(errno == EAGAIN){
+                        usleep(1000);
+                        continue;
+                    }
+                    cerr << "send error" << endl;
+                    return false;
+                }
+                len += ret;
             }
-
             return true;
         }
 
