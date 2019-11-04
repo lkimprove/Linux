@@ -1,5 +1,5 @@
-//获取md5验证
-//linux下获取MD5命令：md5sum
+//在window和linux下获取上传文件的md5，通过对比判断上传的文件是否一致
+//linux下获取md5命令：md5sum
 //window下获取md5命令：certutil -hashfile name md5
 
 #include <iostream>
@@ -21,7 +21,7 @@ class Boundary{
     public:
         int64_t _startAddr;    //每一个boundary的起始位置
         int64_t _dataLen;  //每一个boundary长度
-        string _name;   
+        string _name;   //boundary的功能名  
         string _fileName;   //上传文件的文件名
 };
 
@@ -29,16 +29,16 @@ class Boundary{
 bool BoundaryHeaderProcess(string& boundaryHeader, Boundary& file){
     //Content-Disposition: form-data; name="fileupload"; filename="hello.txt"
     //Content-Type: text/plain
-    //或者
-    //Content-Disposition: form-data; name="submit"
     
     //先通过\r\n分割头部，只取Content-Disposition中的内容
-    //再通过: 来进行分割，只需要name和filename
+    //再通过: 来进行分割，只取name和filename
     
     //通过 \r\n 分割boundary头部的信息
     vector<string> list;
     split(list, boundaryHeader, is_any_of("\r\n"), token_compress_on);
+    
     for(int i = 0; i < list.size(); i++){
+        //通过": "分割分割每一个Content 
         string sep = ": ";
         size_t pos = list[i].find(sep);
         if(pos == string::npos){
@@ -47,20 +47,21 @@ bool BoundaryHeaderProcess(string& boundaryHeader, Boundary& file){
         }   
         string key = list[i].substr(0, pos);
         string val = list[i].substr(pos + sep.size());
-        
+       
+        //只取Content-Disposition的内容
         if(key != "Content-Disposition"){
             continue;
         }
 
-        string nameField = "fileupload";
-        string fileNameSep = "filename=\"";
         //查看该头部是不是fileupload功能
+        string nameField = "fileupload";
         pos = val.find(nameField);
         if(pos == string::npos){
             continue;
         }
        
-        //寻找文件名
+        //获取文件名
+        string fileNameSep = "filename=\"";
         pos = val.find(fileNameSep);
         if(pos == string::npos){
             cerr << "can not find" << fileNameSep << endl;
@@ -84,9 +85,8 @@ bool BoundaryHeaderProcess(string& boundaryHeader, Boundary& file){
 
 //解析body每一个boundary块
 bool BoundaryParse(unordered_map<string, string>& bodyEnv, string& body, vector<Boundary>& list){
-    //获取Content-Type，并从中拿出boundary
-    string sign = "boundary=";
-    string type;
+    //从头部的Content-Type中获取boundary
+    //寻找Content-Type
     auto it = bodyEnv.find("Content-Type");
     if(it != bodyEnv.end()){
         type =  it->second;
@@ -96,11 +96,26 @@ bool BoundaryParse(unordered_map<string, string>& bodyEnv, string& body, vector<
         return false;
     }
 
+    //获取boundary
+    string sign = "boundary=";
+    string type;
     size_t pos = type.find(sign);
     if(pos == string::npos){
         cerr << "can not find boundary=" << endl;
         return false;
     }
+    
+    //从Content-Type中获取的boundary标志，该标志会根据文件生成一个尽量不与文件冲突的标志
+    string boundary = type.substr(pos + sign.size());   
+    string dash = "--";     
+    string craf = "\r\n";
+    string tail = "\r\n\r\n";
+   
+    //每一个HTTP上传请求只有一个first_boundary
+    //当上传多个文件时会出现second_boundary
+    //以last_boundary结尾
+    string firstBoundary = dash + boundary + craf;   //第一个boundary块标志
+    string nextBoundary = craf + dash + boundary;   //下一个boundary块标志
     
     //------WebKitFormBoundaryASkxiuZYYqFisEUd
     //Content-Disposition: form-data; name="fileupload"; filename="hello.txt"
@@ -112,38 +127,27 @@ bool BoundaryParse(unordered_map<string, string>& bodyEnv, string& body, vector<
 
     //&#25552;&#20132;
     //------WebKitFormBoundaryASkxiuZYYqFisEUd--
-   
-    //从Content-Type中获取的boundary标志，该标志会根据文件生成一个尽量不与文件冲突的标志
-    string boundary = type.substr(pos + sign.size());   
-    string dash = "--";     
-    string craf = "\r\n";
-    string tail = "\r\n\r\n";
-    
+  
 
-    string firstBoundary = dash + boundary +craf;   //第一个boundary块标志
-    string nextBoundary = craf + dash + boundary;   //下一个boundary块标志
-
-
-    //获取每一个boundary的头部信息，解析出第一个boundary中的name和filename，
-    //获取第一个boundary与第二个boundary中的文件信息（上传文件的内容），
-    //因为客户端可能会上传多个文件，所有第二个boundary可能会有多个
+    //获取first_boundary的头部信息，解析出第一个boundary中的name和filename，
+    //获取first_boundary与second_boundary中的数据（上传文件的内容），
     size_t curPos, nextPos;
-    curPos = body.find(firstBoundary);
+    curPos = body.find(firstBoundary);  //找到first_boundary的位置
     if(curPos == string::npos){
         cerr << "first boundary error" << endl;
         return false;
     }
     
-    curPos += firstBoundary.size();     //第一块boundary头部的起始位置
+    curPos += firstBoundary.size();     //first_boundary头部的起始位置
 
     while(curPos < body.size()){
-        nextPos = body.find(tail, curPos);      //第一块boundary头部的结束位置
+        nextPos = body.find(tail, curPos);      //*_boundary头部的结束位置
         if(nextPos == string::npos){
             cerr << "can not find" << tail << endl;
             return false;
         }
 
-        //获取第一块boundary的头部
+        //获取*_boundary的头部
         string boundaryHeader = body.substr(curPos, nextPos - curPos);
 
         curPos = nextPos + tail.size();  //数据的起始位置
@@ -153,23 +157,27 @@ bool BoundaryParse(unordered_map<string, string>& bodyEnv, string& body, vector<
             return false;
         }
         
-        int64_t offset = curPos;   //获取数据的起始位置
+        int64_t offset = curPos;   //数据的起始位置
         int64_t length = nextPos - curPos;  //数据长度
 
+        //此位置直接寻找\r\n，不去辨别下一个boundary是否为last_boundary
         nextPos += nextBoundary.size(); //跳过下一个boundary
         curPos = body.find(craf, nextPos);  //查找 \r\n
         if(curPos == string::npos){
             cerr << "can not find " << craf << endl;
             return false;
         }
-        curPos += craf.size(); //指向下一个boundary的位置 
-        //若此时boundary指向结尾，说明没有boundary块了
-
+        
+        //如果找到的boundary为last_boundary，则curPos > body.size()
+        //反之找到的为第二个second_boundary，可以往下继续寻找
+        curPos += craf.size();  
+      
+        //创建Boundary对象，储存file信息
         Boundary file;
         file._startAddr = offset;
         file._dataLen = length;
 
-        //解析头部
+        //解析boundary头部
         bool ret = BoundaryHeaderProcess(boundaryHeader, file);
         if(ret == false){
             cerr << "boundaryHeader process error" << endl;
@@ -191,19 +199,23 @@ bool StorageFile(string& body, vector<Boundary>& list){
             continue;
         }
 
+        //在指定目录下创建文件
         string realPath = _MYROOT + list[i]._fileName;
+        //打开文件
         ofstream file(realPath);
         if(!file.is_open()){
             cerr << "open file" << realPath << "failed" << endl;
             return false;
         }
-        
+       
+        //将上传的文件写入
         file.write(&body[list[i]._startAddr], list[i]._dataLen);
         if(!file.good()){
             cerr << "write file error" << endl;
             return false;
         }
     
+        //关闭文件
         file.close();
     }
 
@@ -213,8 +225,8 @@ bool StorageFile(string& body, vector<Boundary>& list){
 
 int main(int argc, char* argv[], char* env[]){
     //向父进程传入CGI处理结果
-    string fail = "<html><h1>Fileupload Failed<h1></html>";
-    string sucess = "<html><h1>Fileupload Sucess</h1></html>";
+    string sucess = "<html><h1>File Uploaded Successfully<h1></html>";
+    string fail = "<html><h1>File Upload Failed</h1></html>";
 
     //将父进程传入的环境变量储存在inordered_map中
     unordered_map<string, string> bodyEnv;
@@ -234,10 +246,10 @@ int main(int argc, char* argv[], char* env[]){
         bodyEnv[key] = val;
     }
 
-    cerr << "环境变量" << endl;
-    for(auto it : bodyEnv){
-        cerr << it.first << ": " << it.second << endl;
-    }
+    //cerr << "环境变量" << endl;
+    //for(auto it : bodyEnv){
+    //    cerr << it.first << ": " << it.second << endl;
+    //}
 
     //获取正文
     string body;
@@ -265,21 +277,20 @@ int main(int argc, char* argv[], char* env[]){
 
         rlen += ret;
     }
-    cerr << "body: " << endl << body << endl;
+    //cerr << "body: " << endl << body << endl;
 
     //储存每一个boundary块的信息
     vector<Boundary> list;
     bool ret = BoundaryParse(bodyEnv, body, list);
-    cerr << "list: " << endl;
-    for(int i = 0; i < list.size(); i++){
-        cerr << list[i]._fileName << endl;
-    }
-
     if(ret == false){
         cerr << "boundary parse error" << endl;
         cout << fail;
         return -1;
     }
+    //cerr << "list: " << endl;
+    //for(int i = 0; i < list.size(); i++){
+    //    cerr << list[i]._fileName << endl;
+    //}
    
     //上传文件
     ret = StorageFile(body, list);
@@ -290,5 +301,6 @@ int main(int argc, char* argv[], char* env[]){
     }
     
     cout << sucess;
+    
     return 0;
 }
