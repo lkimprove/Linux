@@ -177,21 +177,22 @@ class Server{
                 //  middle_boundary = \r\n--boundary\r\n
                 //  last_boundary = \r\n--boundary--\r\n
                 CGIProcess(req, rep);
+                rep._status = 200;  //状态码
             }
             else if(req._method == "GET" && req._queryString.size() == 0){
                 //若请求方法为GET，且查询字符串为空，此时需要判断客户端请求的路径 filesystem::is_directory
                 //若请求的路径是目录 --- 查看目录
                 if(filesystem::is_directory(realPath)){
                     ListShow(realPath, rep._body);
+                    
                     rep.SetHeader("Content-Type", "text/html");
+                    rep._status = 200;  //状态码
                 }
                 //若请求的路径是文件 --- 文件下载
                 else{
                     RangeDownload(req, rep);
                 }
             }
-
-            rep._status = 200;  //状态码
         }
 
         //外部CGI处理
@@ -320,6 +321,7 @@ class Server{
             //普通下载
             if(it == req._header.end()){
                 Download(realPath, 0, data_len, rep._body);
+                rep._status = 200;  //状态码
             }
             //断点续传
             else{
@@ -354,6 +356,7 @@ class Server{
                 stringstream tmp;
                 tmp << "bytes" << dig_start << "-" << dig_end << "/" << data_len;
                 rep.SetHeader("Content-Range", tmp.str());
+                rep._status = 206;  //状态码
             }
            
             rep.SetHeader("Content-Type", "application/octet-stream");
