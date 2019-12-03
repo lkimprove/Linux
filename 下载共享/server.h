@@ -187,39 +187,7 @@ class Server{
                 }
                 //若请求的路径是文件 --- 文件下载
                 else{
-                    //通过Range判断是否需要断点续传
-                    auto i = rep._header.find("Range");
-                    //非断点续传
-                    if(i == rep._header.end()){
-                        Download(realPath, rep._body);        
-                        rep.SetHeader("Content-Type", "application/octet-stream");
-                        rep.SetHeader("Accept-Ranges", "bytes");
-                        rep.SetHeader("ETag", "abcdefg");
-                    }
-                    //断点续传
-                    else{
-                        string range = i->second;
-                        RangeDownload(realPath, range, rep._body);
-                        rep.SetHeader("Content-Type", "application/octet-stream");
-                        
-                        string uint = "bytes=";
-                        size_t pos = range.find(uint);
-                        if(pos == string::npos){
-                            return;
-                        }
-                        int64_t len = filesystem::file_size(realPath);
-                        stringstream tmp;
-                        tmp << "bytes ";
-                        tmp << range.substr(pos + uint.size());
-                        tmp << "/" ;
-                        tmp << len;
-                            
-                        rep.SetHeader("Content-Range", tmp.str());
-
-                        rep._status = 206;
-                        return;
-                    }
-
+                    RangeDownload(req, rep);
                 }
             }
 
@@ -338,76 +306,83 @@ class Server{
             body = tmp.str();
         }
 
-        //断点续传的下载
-        static bool RangeDownload(string& path, string& range, string& body){
-            //Range: bytes=start-end
-            string uint = "bytes=";    
-            size_t pos = range.find(uint);
-            if(pos == string::npos){
-                cerr << "can not find" << uint << endl;
-                return false;
-            }
-            
-            pos += uint.size();
+    
+        //下载
+        static bool RangeDownload(HttpRequest& req, HttpResponse& rep){
+            string realPath = _MYROOT + req._path;
+            int64_t data_len = filesystem::file_size(realPath);
+            int64_t last_mtime = filesystem::last_write_time(realPath);
+            string etag = to_string(data_len) + to_string(last_mtime);
 
-            size_t nextPos = range.find("-", pos);
-            if(nextPos == string::npos){
-                cerr << "can not find range -" << endl;
-                return false;
+            //通过判断Range来确定是进行普通下载，还是断点续传版本的下载
+            auto it = req._header.find("Range");
+           
+            //普通下载
+            if(it == req._header.end()){
+                Download(realPath, 0, data_len, rep._body);
             }
-            
-            string start = range.substr(pos, nextPos - pos);
-            string end = range.substr(nextPos + 1);
-            stringstream tmp;
-            int64_t dig_start, dig_end;
-            tmp << start;
-            tmp >> dig_start;
-            tmp.clear();
-            if(end.size() == 0){
-                dig_end = filesystem::file_size(path) - 1;    
-            }
+            //断点续传
             else{
-                tmp << end;
-                tmp >> dig_end;
-            }
-          
-            int64_t len = dig_end - dig_start + 1;
-            body.resize(len);
-            
-            ifstream file(path);
-            if(!file.is_open()){
-                return false;
-            }
-            file.seekg(dig_start, ios::beg);
-            file.read(&body[0], len);
-            if(!file.good()){
-                cerr << "read error" << endl;
-                return false;
-            }
+                string range = it->second;
 
-            file.close();
+                string unit = "bytes=";
+                size_t pos = range.find(unit);
+                if(pos == string::npos){
+                    return false;
+                }
+
+                pos += unit.size();
+                size_t pos2 = range.find("-", pos);
+                if(pos2 == string::npos){
+                    return false;
+                }
+
+                string start = range.substr(pos, pos2 - pos);
+                string end = range.substr(pos2 + 1);
+                int64_t dig_start, dig_end;
+                dig_start = atoi(&start[0]);
+                if(end.size() == 0){
+                    dig_end = data_len - 1;
+                }
+                else{
+                    dig_end = atoi(&end[0]);    
+                }
+
+                int64_t range_len = dig_end - dig_start + 1;
+                Download(realPath, dig_start, range_len, rep._body);
+                
+                stringstream tmp;
+                tmp << "bytes" << dig_start << "-" << dig_end << "/" << data_len;
+                rep.SetHeader("Content-Range", tmp.str());
+            }
+           
+            rep.SetHeader("Content-Type", "application/octet-stream");
+            rep.SetHeader("Accept-Ranges", "bytes");
+            rep.SetHeader("ETag", etag);
 
             return true;
         }
 
-        //普通下载
-        static bool Download(string& path,string& body){
-            int64_t fsize = filesystem::file_size(path);    //获取文件大小
-            body.resize(fsize);
+        static bool Download(string& path, int64_t start, int64_t len, string& body){
+            body.resize(len);
+
             ifstream file(path);
             if(!file.is_open()){
-                cerr << "open file error" << endl;
+                cerr << "open file erroe" << endl;
                 return false;
             }
-            file.read(&body[0], fsize);
+
+            file.seekg(start, ios::beg);
+            file.read(&body[0], len);
             if(!file.good()){
                 cerr << "read file data error" << endl;
                 return false;
             }
 
             file.close();
+            
             return true;
         }
-
+    
 };
 #endif
