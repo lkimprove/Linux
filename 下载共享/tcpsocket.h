@@ -75,7 +75,7 @@ class TcpSocket{
             return true;
         }
 
-        //开始监听
+        //获取已连接的客户端
         bool Accept(TcpSocket& newSock){
             sockaddr_in addr;
             socklen_t len = sizeof(addr);
