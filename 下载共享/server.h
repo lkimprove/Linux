@@ -338,6 +338,7 @@ class Server{
             body = tmp.str();
         }
 
+        //断点续传的下载
         static bool RangeDownload(string& path, string& range, string& body){
             //Range: bytes=start-end
             string uint = "bytes=";    
@@ -389,7 +390,7 @@ class Server{
             return true;
         }
 
-        //下载
+        //普通下载
         static bool Download(string& path,string& body){
             int64_t fsize = filesystem::file_size(path);    //获取文件大小
             body.resize(fsize);
