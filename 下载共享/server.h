@@ -58,7 +58,7 @@ class Server{
                     continue;
                 }
 
-                //如果就绪的是通信套接字
+                //处理就绪的socket
                 for(int i = 0; i < list.size(); i++){
                     //若就绪的是监听套接字
                     if(list[i].GetFd() == _listenSock.GetFd()){
