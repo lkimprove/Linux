@@ -87,6 +87,7 @@ bool BoundaryHeaderProcess(string& boundaryHeader, Boundary& file){
 bool BoundaryParse(unordered_map<string, string>& bodyEnv, string& body, vector<Boundary>& list){
     //从头部的Content-Type中获取boundary
     //寻找Content-Type
+    string type;
     auto it = bodyEnv.find("Content-Type");
     if(it != bodyEnv.end()){
         type =  it->second;
@@ -98,7 +99,6 @@ bool BoundaryParse(unordered_map<string, string>& bodyEnv, string& body, vector<
 
     //获取boundary
     string sign = "boundary=";
-    string type;
     size_t pos = type.find(sign);
     if(pos == string::npos){
         cerr << "can not find boundary=" << endl;
