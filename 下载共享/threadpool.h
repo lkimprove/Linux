@@ -7,6 +7,7 @@
 using namespace std;
 
 typedef void(*Handler_t)(int);
+//也可写成void(*Handler_t)(int)，但第二种形式是定义函数指针前的声明，第一种形式是定义一个函数指针类型
 
 class ThreadTask{
     private:
